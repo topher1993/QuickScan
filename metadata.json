@@ -1,0 +1,7 @@
+{
+  "name": "QuickScan Pay",
+  "description": "Instantly extract Name, Phone Number, and Amount from photos for rapid payment processing. Optimized for mobile use.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
