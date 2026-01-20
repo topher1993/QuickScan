@@ -79,11 +79,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
     if (isIOS()) {
       // --- iOS STRATEGY ---
       // 1. Use SYNCHRONOUS copy (execCommand).
-      // 2. Redirect IMMEDIATELY without waiting.
+      // 2. Redirect IMMEDIATELY.
       const success = performSyncCopy(text);
       
       if (success) {
         setCopiedField('gcash');
+        // Immediate redirect is crucial for iOS Safari
         window.location.href = "gcash://";
         setTimeout(() => setCopiedField(null), 3000);
       } else {
@@ -94,17 +95,16 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
     } else {
       // --- ANDROID STRATEGY ---
       // 1. Use ASYNC copy (navigator.clipboard).
-      // 2. Redirect after promise resolves.
+      // 2. Redirect IMMEDIATELY after promise, NO TIMEOUT.
+      // Timeout on Android can break the "User Activation" token for deep links.
       try {
         await navigator.clipboard.writeText(text);
         setCopiedField('gcash');
         
-        // Short timeout for visual feedback on Android
-        setTimeout(() => {
-          window.location.href = "gcash://";
-          setCopiedField(null);
-        }, 500);
-
+        // Immediate redirect allows the deep link to capture the user gesture
+        window.location.href = "gcash://";
+        
+        setTimeout(() => setCopiedField(null), 2000);
       } catch (err) {
         // Fallback if Async fails on Android
         performSyncCopy(text);

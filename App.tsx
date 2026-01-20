@@ -37,7 +37,18 @@ const App: React.FC = () => {
       setAppState(AppState.SUCCESS);
     } catch (err: any) {
       console.error(err);
-      setError("Failed to extract data. Please try again with a clearer photo.");
+      
+      // Smart Error Handling
+      let errorMessage = "Failed to extract data. Please try again with a clearer photo.";
+      const errString = err.toString().toLowerCase();
+      
+      if (errString.includes('403') || errString.includes('leaked') || errString.includes('permission_denied')) {
+        errorMessage = "CRITICAL: API Key is invalid or leaked. Please generate a new key in Google AI Studio and update your .env file.";
+      } else if (errString.includes('503') || errString.includes('overloaded')) {
+        errorMessage = "Service is temporarily busy. Please try again in a few seconds.";
+      }
+
+      setError(errorMessage);
       setAppState(AppState.ERROR);
     }
   };
@@ -126,7 +137,7 @@ const App: React.FC = () => {
                 </svg>
               </div>
               <h3 className="text-lg font-bold text-red-200 mb-1">Scan Failed</h3>
-              <p className="text-red-200/70 text-sm mb-6">{error}</p>
+              <p className="text-red-200/70 text-sm mb-6 break-words">{error}</p>
               <button 
                 onClick={handleReset}
                 className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
