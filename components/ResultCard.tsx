@@ -9,64 +9,111 @@ interface ResultCardProps {
 const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const performCopy = async (text: string): Promise<boolean> => {
+  // Helper to detect iOS devices
+  const isIOS = () => {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  };
+
+  // iOS-Safe Synchronous Copy Method
+  // Required for iOS because 'await' breaks the deep link trigger
+  const performSyncCopy = (text: string): boolean => {
     try {
-      // Primary method: Modern Clipboard API (Requires HTTPS)
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } else {
-        // Fallback for older browsers or HTTP contexts
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        
-        // Ensure it's not visible but part of DOM
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "0";
-        document.body.appendChild(textArea);
-        
-        textArea.focus();
-        textArea.select();
-        
-        const successful = document.execCommand('copy');
-        document.body.removeChild(textArea);
-        return successful;
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // Critical for iOS: Ensure element is part of DOM but hidden
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      // Critical for iOS: Prevent zooming and allow selection
+      textArea.contentEditable = "true";
+      textArea.readOnly = false;
+      
+      document.body.appendChild(textArea);
+      
+      // Critical for iOS: Explicit range selection
+      const range = document.createRange();
+      range.selectNodeContents(textArea);
+      const selection = window.getSelection();
+      if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
       }
+      textArea.setSelectionRange(0, 999999); 
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return successful;
     } catch (err) {
-      console.error('Copy failed', err);
+      console.error('Sync copy failed', err);
       return false;
     }
   };
 
+  const performAsyncCopy = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      return performSyncCopy(text);
+    } catch (err) {
+      return performSyncCopy(text);
+    }
+  };
+
   const copyToClipboard = async (text: string, field: string) => {
-    const success = await performCopy(text);
+    // Standard copy button logic
+    const success = await performAsyncCopy(text);
     if (success) {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
     } else {
-      alert("Could not copy automatically. Please copy manually.");
+      alert("Could not copy automatically.");
     }
   };
 
   const handleOpenGCash = async () => {
-    // 1. Copy the phone number to clipboard automatically
-    const success = await performCopy(data.phoneNumber);
-    
-    if (success) {
-      setCopiedField('gcash');
-      // 2. Attempt to open GCash using its URL scheme
-      setTimeout(() => {
-        window.location.href = "gcash://";
-      }, 500);
+    const text = data.phoneNumber;
+
+    if (isIOS()) {
+      // --- iOS STRATEGY ---
+      // 1. Use SYNCHRONOUS copy (execCommand).
+      // 2. Redirect IMMEDIATELY without waiting.
+      const success = performSyncCopy(text);
       
-      setTimeout(() => setCopiedField(null), 3000);
+      if (success) {
+        setCopiedField('gcash');
+        window.location.href = "gcash://";
+        setTimeout(() => setCopiedField(null), 3000);
+      } else {
+        alert("Could not copy number. Opening GCash anyway.");
+        window.location.href = "gcash://";
+      }
+
     } else {
-      alert("Please ensure you are using HTTPS to allow clipboard access.");
+      // --- ANDROID STRATEGY ---
+      // 1. Use ASYNC copy (navigator.clipboard).
+      // 2. Redirect after promise resolves.
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopiedField('gcash');
+        
+        // Short timeout for visual feedback on Android
+        setTimeout(() => {
+          window.location.href = "gcash://";
+          setCopiedField(null);
+        }, 500);
+
+      } catch (err) {
+        // Fallback if Async fails on Android
+        performSyncCopy(text);
+        setCopiedField('gcash');
+        window.location.href = "gcash://";
+      }
     }
   };
 
-  // Create a combined string for single-click full copy
   const fullSummary = `Name: ${data.name}\nPhone: ${data.phoneNumber}\nAmount: ${data.amount}`;
 
   return (
@@ -84,7 +131,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
         >
           <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
           <span className="relative z-10 flex items-center gap-2">
-            {copiedField === 'gcash' ? 'Number Copied! Opening...' : 'Copy Number & Open GCash'}
+            {copiedField === 'gcash' ? 'Copied! Opening...' : 'Copy Number & Open GCash'}
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
@@ -160,6 +207,13 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
           >
             Scan New
           </button>
+      </div>
+      
+      {/* Fallback link in case Deep Link fails completely */}
+      <div className="mt-4 text-center">
+        <a href="gcash://" className="text-xs text-slate-500 hover:text-blue-400 underline">
+          If GCash didn't open, click here
+        </a>
       </div>
     </div>
   );

@@ -33,7 +33,7 @@ export const extractDetailsFromImage = async (base64Image: string, mimeType: str
             },
           },
           {
-            text: "Extract 'name', 'phoneNumber', and 'amount' for a payment receipt. Focus on mobile numbers (e.g., 09xxxxxxxxx or +639xxxxxxxxx). Format phoneNumber as a pure string of digits (remove spaces, dashes, or +63 prefix if present, ensuring it starts with 09 if it's a PH number). The amount should be a pure number. If a field is missing, use 'Unknown' or 0.",
+            text: "Extract 'name', 'phoneNumber', and 'amount' for a payment receipt. Focus on mobile numbers. IMPORTANT: Format phoneNumber as a pure string of digits starting with 09 (e.g., 09171234567). If the image shows +639..., convert it to 09... Remove any spaces or dashes. The amount should be a pure number. If a field is missing, use 'Unknown' or 0.",
           },
         ],
       },
@@ -48,7 +48,7 @@ export const extractDetailsFromImage = async (base64Image: string, mimeType: str
             },
             phoneNumber: {
               type: Type.STRING,
-              description: "The mobile phone number found",
+              description: "The mobile phone number found (e.g., 09xxxxxxxxx)",
             },
             amount: {
               type: Type.NUMBER,
