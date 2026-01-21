@@ -8,6 +8,7 @@ interface ResultCardProps {
 
 const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isOpening, setIsOpening] = useState(false);
 
   // Helper to detect iOS devices
   const isIOS = () => {
@@ -15,7 +16,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   };
 
   // iOS-Safe Synchronous Copy Method
-  // Required for iOS because 'await' breaks the deep link trigger
   const performSyncCopy = (text: string): boolean => {
     try {
       const textArea = document.createElement("textarea");
@@ -50,169 +50,147 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
     }
   };
 
-  const performAsyncCopy = async (text: string): Promise<boolean> => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-      return performSyncCopy(text);
-    } catch (err) {
-      return performSyncCopy(text);
-    }
-  };
-
   const copyToClipboard = async (text: string, field: string) => {
-    // Standard copy button logic
-    const success = await performAsyncCopy(text);
+    // Try Modern Async API first, fallback to Sync
+    let success = false;
+    try {
+        await navigator.clipboard.writeText(text);
+        success = true;
+    } catch {
+        success = performSyncCopy(text);
+    }
+
     if (success) {
       setCopiedField(field);
+      // Reset status after 2 seconds
       setTimeout(() => setCopiedField(null), 2000);
-    } else {
-      alert("Could not copy automatically.");
     }
   };
 
-  const handleOpenGCash = async () => {
+  const handleOpenGCash = () => {
+    if (isOpening) return; // Prevent double taps
+    setIsOpening(true);
+    
     const text = data.phoneNumber;
 
-    if (isIOS()) {
-      // --- iOS STRATEGY ---
-      // 1. Use SYNCHRONOUS copy (execCommand).
-      // 2. Redirect IMMEDIATELY.
-      const success = performSyncCopy(text);
-      
-      if (success) {
-        setCopiedField('gcash');
-        // Immediate redirect is crucial for iOS Safari
-        window.location.href = "gcash://";
-        setTimeout(() => setCopiedField(null), 3000);
-      } else {
-        alert("Could not copy number. Opening GCash anyway.");
-        window.location.href = "gcash://";
-      }
-
+    // 1. COPY ACTION
+    // On iOS, we MUST use the sync method inside the click handler
+    // to ensure the clipboard write is allowed.
+    const success = performSyncCopy(text);
+    
+    if (success) {
+      setCopiedField('gcash');
     } else {
-      // --- ANDROID STRATEGY ---
-      // 1. Use ASYNC copy (navigator.clipboard).
-      // 2. Redirect IMMEDIATELY after promise, NO TIMEOUT.
-      // Timeout on Android can break the "User Activation" token for deep links.
-      try {
-        await navigator.clipboard.writeText(text);
-        setCopiedField('gcash');
-        
-        // Immediate redirect allows the deep link to capture the user gesture
-        window.location.href = "gcash://";
-        
-        setTimeout(() => setCopiedField(null), 2000);
-      } catch (err) {
-        // Fallback if Async fails on Android
-        performSyncCopy(text);
-        setCopiedField('gcash');
-        window.location.href = "gcash://";
-      }
+      // Fallback attempt
+      copyToClipboard(text, 'gcash');
     }
-  };
 
-  const fullSummary = `Name: ${data.name}\nPhone: ${data.phoneNumber}\nAmount: ${data.amount}`;
+    // 2. OPEN APP ACTION
+    // We introduce a small delay (300ms). 
+    // Why? On fast iPhones, the OS might switch context to the App 
+    // before the Clipboard write operation fully commits to system memory.
+    setTimeout(() => {
+        window.location.href = "gcash://";
+        setIsOpening(false);
+    }, 500);
+    
+    // Reset the "Copied" text after a delay
+    setTimeout(() => setCopiedField(null), 3000);
+  };
 
   return (
     <div className="w-full max-w-md bg-slate-800/80 backdrop-blur-md rounded-2xl p-6 border border-slate-700 shadow-xl animate-fade-in-up">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-white">Extracted Details</h2>
-        <span className="text-xs font-medium px-2 py-1 bg-green-500/20 text-green-400 rounded-full">Success</span>
+        <h2 className="text-xl font-semibold text-white">Ready to Pay</h2>
+        <span className="text-xs font-bold px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30">
+          SCAN SUCCESS
+        </span>
       </div>
 
-      <div className="space-y-4">
-        {/* GCash Primary Action */}
-        <button
-          onClick={handleOpenGCash}
-          className="w-full group relative overflow-hidden bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 mb-6"
-        >
-          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-          <span className="relative z-10 flex items-center gap-2">
-            {copiedField === 'gcash' ? 'Copied! Opening...' : 'Copy Number & Open GCash'}
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </span>
-        </button>
-
-        {/* Amount */}
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
-          <label className="text-xs text-slate-400 uppercase tracking-wider">Amount</label>
-          <div className="flex justify-between items-end">
-            <span className="text-3xl font-bold text-white tracking-tight">{data.amount}</span>
-            <button 
-              onClick={() => copyToClipboard(data.amount.toString(), 'amount')}
-              className="text-blue-400 hover:text-blue-300 text-sm font-medium px-3 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+      <div className="space-y-6">
+        
+        {/* STEP 1: Phone Number & Open GCash */}
+        <div className="space-y-2">
+            <label className="text-xs text-blue-300 font-bold tracking-wider uppercase ml-1">Step 1: Send Money</label>
+            <button
+            onClick={handleOpenGCash}
+            disabled={isOpening}
+            className={`w-full group relative overflow-hidden text-white font-bold py-5 px-4 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95 flex items-center justify-between ${isOpening ? 'bg-blue-800 cursor-wait' : 'bg-blue-600 hover:bg-blue-500'}`}
             >
-              {copiedField === 'amount' ? 'Copied!' : 'Copy'}
+            <div className="flex flex-col items-start">
+                <span className="text-xs font-normal opacity-80 mb-0.5">
+                    {isOpening ? 'Opening GCash...' : 'Copy Phone & Open App'}
+                </span>
+                <span className="text-xl tracking-wide font-mono">{data.phoneNumber}</span>
+            </div>
+            
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${copiedField === 'gcash' ? 'bg-white text-blue-600' : 'bg-blue-700/50'}`}>
+                <span className="text-sm font-bold">{copiedField === 'gcash' ? 'COPIED!' : 'OPEN'}</span>
+                {copiedField !== 'gcash' && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                )}
+            </div>
             </button>
-          </div>
         </div>
 
-        {/* Name */}
-        <div className="flex items-center justify-between p-3 border-b border-slate-700/50">
-          <div>
-            <label className="text-xs text-slate-400 block">Name</label>
-            <span className="text-lg text-slate-200">{data.name}</span>
-          </div>
-          <button 
-            onClick={() => copyToClipboard(data.name, 'name')}
-            className="p-2 text-slate-400 hover:text-white transition-colors"
-          >
-             {copiedField === 'name' ? (
-               <span className="text-xs text-green-400 font-bold">✓</span>
-             ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-             )}
-          </button>
+        {/* STEP 2: Amount */}
+        <div className="space-y-2">
+            <label className="text-xs text-slate-400 font-bold tracking-wider uppercase ml-1">Step 2: Enter Amount</label>
+            <button 
+                onClick={() => copyToClipboard(data.amount.toString(), 'amount')}
+                className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                    copiedField === 'amount' 
+                    ? 'bg-green-500/10 border-green-500/50' 
+                    : 'bg-slate-900/50 border-slate-700 hover:border-slate-500'
+                }`}
+            >
+                <div className="flex flex-col items-start">
+                    <span className="text-3xl font-bold text-white tracking-tight">{data.amount}</span>
+                </div>
+                <div className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium text-blue-400">
+                    {copiedField === 'amount' ? 'COPIED ✓' : 'COPY AMOUNT'}
+                </div>
+            </button>
         </div>
 
-        {/* Phone */}
-        <div className="flex items-center justify-between p-3 border-b border-slate-700/50">
-          <div>
-            <label className="text-xs text-slate-400 block">Phone</label>
-            <span className="text-lg text-slate-200 font-mono">{data.phoneNumber}</span>
-          </div>
-          <button 
-            onClick={() => copyToClipboard(data.phoneNumber, 'phone')}
-            className="p-2 text-slate-400 hover:text-white transition-colors"
-          >
-             {copiedField === 'phone' ? (
-               <span className="text-xs text-green-400 font-bold">✓</span>
-             ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-             )}
-          </button>
+        {/* DETAILS: Name (Validation) */}
+        <div className="pt-4 border-t border-slate-700/50">
+            <div className="flex items-center justify-between px-2">
+                <div>
+                    <label className="text-xs text-slate-500 block mb-1">Verify Name</label>
+                    <span className="text-base text-slate-300 font-medium">{data.name}</span>
+                </div>
+                <button 
+                    onClick={() => copyToClipboard(data.name, 'name')}
+                    className="p-2 text-slate-500 hover:text-white transition-colors"
+                >
+                    {copiedField === 'name' ? (
+                    <span className="text-xs text-green-400 font-bold">Copied</span>
+                    ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    )}
+                </button>
+            </div>
         </div>
       </div>
 
-      <div className="mt-8 flex gap-3">
-         <button
-            onClick={() => copyToClipboard(fullSummary, 'all')}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-xl transition-colors text-sm"
-          >
-            {copiedField === 'all' ? 'All Copied!' : 'Copy All'}
-          </button>
-          
+      <div className="mt-8">
           <button
             onClick={onReset}
-            className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold py-3 px-4 rounded-xl transition-all"
+            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-4 rounded-xl transition-all border border-slate-700"
           >
-            Scan New
+            Scan Another Receipt
           </button>
       </div>
       
-      {/* Fallback link in case Deep Link fails completely */}
+      {/* Fallback link */}
       <div className="mt-4 text-center">
-        <a href="gcash://" className="text-xs text-slate-500 hover:text-blue-400 underline">
-          If GCash didn't open, click here
+        <a href="gcash://" className="text-[10px] text-slate-600 hover:text-blue-400">
+          Trouble opening app? Click here to launch GCash manually
         </a>
       </div>
     </div>
