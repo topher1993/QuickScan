@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExtractedData } from '../types';
 
 interface ResultCardProps {
@@ -8,6 +8,20 @@ interface ResultCardProps {
 
 const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [targetLink, setTargetLink] = useState<string>("gcash://");
+
+  // Determine the correct deep link based on OS on mount
+  useEffect(() => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    if (/android/i.test(userAgent)) {
+      // Android Intent: Explicitly tells Android to open the app package, 
+      // preventing the "Continue to website" gray screen error.
+      setTargetLink("intent://#Intent;scheme=gcash;package=com.globe.gcash.android;end");
+    } else {
+      // iOS / Standard fallback
+      setTargetLink("gcash://");
+    }
+  }, []);
 
   // iOS-Safe Synchronous Copy Method
   const performSyncCopy = (text: string): boolean => {
@@ -70,7 +84,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
     if (success) {
       setCopiedField('gcash');
     } else {
-      // Fallback async copy (might not finish before nav, but worth a try)
+      // Fallback async copy
       copyToClipboard(text, 'gcash');
     }
     
@@ -94,12 +108,11 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
             <label className="text-xs text-blue-300 font-bold tracking-wider uppercase ml-1">Step 1: Send Money</label>
             
             {/* 
-                Use a native <a> tag. 
-                This allows iOS to see a real link click, which is less likely to be blocked 
-                than a JavaScript window.location redirect.
+                Use a native <a> tag with dynamic href.
+                Android gets 'intent://', iOS gets 'gcash://'.
             */}
             <a
-              href="gcash://"
+              href={targetLink}
               onClick={handleCopyAndAllowNav}
               className="w-full group relative overflow-hidden text-white font-bold py-5 px-4 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95 flex items-center justify-between bg-blue-600 hover:bg-blue-500"
             >
@@ -122,13 +135,13 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
             
             {/* Dedicated "Just Open" button as backup */}
             <div className="flex gap-2 mt-2">
-                <a href="gcash://" className="flex-1 text-center py-3 bg-slate-700/50 text-xs font-bold text-white border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors">
+                <a href={targetLink} className="flex-1 text-center py-3 bg-slate-700/50 text-xs font-bold text-white border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors">
                    FORCE OPEN GCASH APP
                 </a>
             </div>
             
             <p className="text-[10px] text-slate-500 text-center mt-2">
-                Tip: If this doesn't work, open this page in <strong>Safari</strong> (not Messenger).
+                Tip: If this doesn't work, open this page in <strong>Safari/Chrome</strong> (not Messenger).
             </p>
         </div>
 
