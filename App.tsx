@@ -7,7 +7,7 @@ import { extractDetailsFromImage, fileToGenerativePart } from './services/gemini
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [data, setData] = useState<ExtractedData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<{ message: string; isAuthError: boolean } | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSecure, setIsSecure] = useState<boolean>(true);
 
@@ -21,7 +21,7 @@ const App: React.FC = () => {
   const handleImageSelected = async (file: File) => {
     try {
       setAppState(AppState.ANALYZING);
-      setError(null);
+      setErrorState(null);
       
       // Create local preview
       const objectUrl = URL.createObjectURL(file);
@@ -36,19 +36,33 @@ const App: React.FC = () => {
       setData(extractedData);
       setAppState(AppState.SUCCESS);
     } catch (err: any) {
-      console.error(err);
+      console.error("Full Error Object:", err);
       
-      // Smart Error Handling
-      let errorMessage = "Failed to extract data. Please try again with a clearer photo.";
-      const errString = err.toString().toLowerCase();
+      let errorMessage = "Failed to extract data.";
+      let isAuthError = false;
       
-      if (errString.includes('403') || errString.includes('leaked') || errString.includes('permission_denied')) {
-        errorMessage = "CRITICAL: API Key is invalid or leaked. Please generate a new key in Google AI Studio and update your .env file.";
-      } else if (errString.includes('503') || errString.includes('overloaded')) {
-        errorMessage = "Service is temporarily busy. Please try again in a few seconds.";
+      // Robust error message extraction
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else {
+        errorMessage = JSON.stringify(err);
       }
 
-      setError(errorMessage);
+      const lowerErr = errorMessage.toLowerCase();
+
+      // Check for 403, permission denied, or key validity issues
+      if (
+        lowerErr.includes('403') || 
+        lowerErr.includes('permission_denied') || 
+        lowerErr.includes('api key') ||
+        lowerErr.includes('fetch failed') // Sometimes fetch blocks look like this
+      ) {
+        isAuthError = true;
+      }
+
+      setErrorState({ message: errorMessage, isAuthError });
       setAppState(AppState.ERROR);
     }
   };
@@ -57,7 +71,7 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
     setData(null);
     setPreviewUrl(null);
-    setError(null);
+    setErrorState(null);
   };
 
   return (
@@ -129,18 +143,35 @@ const App: React.FC = () => {
         )}
 
         {/* Error State */}
-        {appState === AppState.ERROR && (
-           <div className="w-full max-w-md bg-red-500/10 border border-red-500/50 rounded-xl p-6 text-center">
-              <div className="text-red-400 mb-2">
+        {appState === AppState.ERROR && errorState && (
+           <div className="w-full max-w-md bg-red-500/10 border border-red-500/50 rounded-xl p-6">
+              <div className="text-center text-red-400 mb-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-red-200 mb-1">Scan Failed</h3>
-              <p className="text-red-200/70 text-sm mb-6 break-words">{error}</p>
+              <h3 className="text-lg font-bold text-red-200 mb-2 text-center">Scan Failed</h3>
+              
+              {errorState.isAuthError ? (
+                <div className="bg-slate-900/50 p-4 rounded-lg text-sm text-left border border-slate-700">
+                  <p className="font-bold text-red-300 mb-2">Google API Error (403)</p>
+                  <p className="text-slate-300 mb-3">If "Generative Language API" is missing from your list, follow these steps:</p>
+                  <ol className="list-decimal pl-4 space-y-2 text-slate-400">
+                    <li>Go to <strong>Google Cloud Console</strong> &gt; <strong>APIs & Services</strong> &gt; <strong>Library</strong>.</li>
+                    <li>Type <strong>"Generative Language"</strong> in the search bar.</li>
+                    <li>Click the result and click the blue <strong>ENABLE</strong> button.</li>
+                    <li>Wait 1 minute, then go to <strong>Credentials</strong>.</li>
+                    <li>Create a <strong>New API Key</strong>.</li>
+                    <li>Update your <code>.env</code> file and <strong>restart the dev server</strong>.</li>
+                  </ol>
+                </div>
+              ) : (
+                <p className="text-red-200/70 text-sm mb-6 text-center break-words">{errorState.message}</p>
+              )}
+
               <button 
                 onClick={handleReset}
-                className="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+                className="w-full mt-6 bg-red-600 hover:bg-red-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
               >
                 Try Again
               </button>
