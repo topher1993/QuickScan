@@ -8,11 +8,8 @@ interface ResultCardProps {
 
 const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [isOpening, setIsOpening] = useState(false);
 
   // iOS-Safe Synchronous Copy Method
-  // This is required because modern navigator.clipboard.writeText often fails 
-  // within the specific timing constraints of redirecting to another app on iOS.
   const performSyncCopy = (text: string): boolean => {
     try {
       const textArea = document.createElement("textarea");
@@ -48,7 +45,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   };
 
   const copyToClipboard = async (text: string, field: string) => {
-    // Try Modern Async API first, fallback to Sync
     let success = false;
     try {
         await navigator.clipboard.writeText(text);
@@ -59,39 +55,26 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
 
     if (success) {
       setCopiedField(field);
-      // Reset status after 2 seconds
       setTimeout(() => setCopiedField(null), 2000);
     }
   };
 
-  const handleOpenGCash = () => {
-    if (isOpening) return; // Prevent double taps
-    setIsOpening(true);
-    
+  // This function only handles the COPY part. 
+  // The Navigation is handled natively by the <a> tag href.
+  const handleCopyAndAllowNav = () => {
     const text = data.phoneNumber;
-
-    // 1. COPY ACTION
-    // On iOS, we MUST use the sync method inside the click handler
-    // to ensure the clipboard write is allowed.
+    
+    // Attempt sync copy
     const success = performSyncCopy(text);
     
     if (success) {
       setCopiedField('gcash');
     } else {
-      // Fallback attempt
+      // Fallback async copy (might not finish before nav, but worth a try)
       copyToClipboard(text, 'gcash');
     }
-
-    // 2. OPEN APP ACTION
-    // We introduce a small delay (500ms). 
-    // Why? On fast iPhones, the OS might switch context to the App 
-    // before the Clipboard write operation fully commits to system memory.
-    setTimeout(() => {
-        window.location.href = "gcash://";
-        setIsOpening(false);
-    }, 500);
     
-    // Reset the "Copied" text after a delay
+    // Reset status
     setTimeout(() => setCopiedField(null), 3000);
   };
 
@@ -109,27 +92,44 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
         {/* STEP 1: Phone Number & Open GCash */}
         <div className="space-y-2">
             <label className="text-xs text-blue-300 font-bold tracking-wider uppercase ml-1">Step 1: Send Money</label>
-            <button
-            onClick={handleOpenGCash}
-            disabled={isOpening}
-            className={`w-full group relative overflow-hidden text-white font-bold py-5 px-4 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95 flex items-center justify-between ${isOpening ? 'bg-blue-800 cursor-wait' : 'bg-blue-600 hover:bg-blue-500'}`}
+            
+            {/* 
+                Use a native <a> tag. 
+                This allows iOS to see a real link click, which is less likely to be blocked 
+                than a JavaScript window.location redirect.
+            */}
+            <a
+              href="gcash://"
+              onClick={handleCopyAndAllowNav}
+              className="w-full group relative overflow-hidden text-white font-bold py-5 px-4 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95 flex items-center justify-between bg-blue-600 hover:bg-blue-500"
             >
-            <div className="flex flex-col items-start">
-                <span className="text-xs font-normal opacity-80 mb-0.5">
-                    {isOpening ? 'Opening GCash...' : 'Copy Phone & Open App'}
-                </span>
-                <span className="text-xl tracking-wide font-mono">{data.phoneNumber}</span>
+                <div className="flex flex-col items-start">
+                    <span className="text-xs font-normal opacity-80 mb-0.5">
+                        Copy Phone & Open App
+                    </span>
+                    <span className="text-xl tracking-wide font-mono">{data.phoneNumber}</span>
+                </div>
+                
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${copiedField === 'gcash' ? 'bg-white text-blue-600' : 'bg-blue-700/50'}`}>
+                    <span className="text-sm font-bold">{copiedField === 'gcash' ? 'COPIED!' : 'OPEN'}</span>
+                    {copiedField !== 'gcash' && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                    )}
+                </div>
+            </a>
+            
+            {/* Dedicated "Just Open" button as backup */}
+            <div className="flex gap-2 mt-2">
+                <a href="gcash://" className="flex-1 text-center py-3 bg-slate-700/50 text-xs font-bold text-white border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors">
+                   FORCE OPEN GCASH APP
+                </a>
             </div>
             
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${copiedField === 'gcash' ? 'bg-white text-blue-600' : 'bg-blue-700/50'}`}>
-                <span className="text-sm font-bold">{copiedField === 'gcash' ? 'COPIED!' : 'OPEN'}</span>
-                {copiedField !== 'gcash' && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                )}
-            </div>
-            </button>
+            <p className="text-[10px] text-slate-500 text-center mt-2">
+                Tip: If this doesn't work, open this page in <strong>Safari</strong> (not Messenger).
+            </p>
         </div>
 
         {/* STEP 2: Amount */}
@@ -182,13 +182,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
           >
             Scan Another Receipt
           </button>
-      </div>
-      
-      {/* Fallback link */}
-      <div className="mt-4 text-center">
-        <a href="gcash://" className="text-[10px] text-slate-600 hover:text-blue-400">
-          Trouble opening app? Click here to launch GCash manually
-        </a>
       </div>
     </div>
   );
