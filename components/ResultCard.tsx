@@ -10,12 +10,9 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isOpening, setIsOpening] = useState(false);
 
-  // Helper to detect iOS devices
-  const isIOS = () => {
-    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  };
-
   // iOS-Safe Synchronous Copy Method
+  // This is required because modern navigator.clipboard.writeText often fails 
+  // within the specific timing constraints of redirecting to another app on iOS.
   const performSyncCopy = (text: string): boolean => {
     try {
       const textArea = document.createElement("textarea");
@@ -86,7 +83,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ data, onReset }) => {
     }
 
     // 2. OPEN APP ACTION
-    // We introduce a small delay (300ms). 
+    // We introduce a small delay (500ms). 
     // Why? On fast iPhones, the OS might switch context to the App 
     // before the Clipboard write operation fully commits to system memory.
     setTimeout(() => {
