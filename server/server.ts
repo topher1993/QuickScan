@@ -34,6 +34,9 @@ db.run(`
 `);
 
 // Gemini AI setup
+if (!process.env.GEMINI_API_KEY) {
+  console.error('GEMINI_API_KEY environment variable is not set!');
+}
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Routes
@@ -60,7 +63,15 @@ app.post('/api/scans', (req, res) => {
 
 app.post('/api/extract', async (req, res) => {
   try {
+    console.log('Extract request received');
     const { base64Image, mimeType } = req.body;
+    console.log('Request body:', { mimeType, base64ImageLength: base64Image?.length });
+
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY not found');
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-1.5-flash',
       contents: {
