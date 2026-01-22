@@ -19,7 +19,7 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
 
 export const extractDetailsFromImage = async (base64Image: string, mimeType: string): Promise<ExtractedData> => {
   try {
-    const response = await fetch('https://quickscan-backend.onrender.com/api/extract', {
+    const response = await fetch('https://quickscan-backend-i6x8.onrender.com/api/extract', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
