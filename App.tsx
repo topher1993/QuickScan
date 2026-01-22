@@ -4,6 +4,27 @@ import ResultCard from './components/ResultCard';
 import { AppState, ExtractedData } from './types';
 import { extractDetailsFromImage, fileToGenerativePart } from './services/geminiService';
 
+const saveScanToDatabase = async (data: ExtractedData) => {
+  try {
+    const response = await fetch('http://localhost:3001/api/scans', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        phoneNumber: data.phoneNumber,
+        amount: data.amount,
+        name: data.name,
+      }),
+    });
+    if (!response.ok) {
+      console.error('Failed to save scan to database');
+    }
+  } catch (error) {
+    console.error('Error saving to database:', error);
+  }
+};
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [data, setData] = useState<ExtractedData | null>(null);
@@ -32,6 +53,9 @@ const App: React.FC = () => {
       
       // API Call
       const extractedData = await extractDetailsFromImage(base64Data, file.type);
+      
+      // Save to database
+      await saveScanToDatabase(extractedData);
       
       setData(extractedData);
       setAppState(AppState.SUCCESS);

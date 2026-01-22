@@ -10,11 +10,18 @@ View your app in AI Studio: https://ai.studio/apps/drive/13wql6LMBuYX4hM5nNTwajm
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+2. Set the `GEMINI_API_KEY` in [.env](.env) to your Gemini API key (for backend security)
+3. Run both servers:
+   `npm run dev:full`
+
+## Backend API
+
+The server provides endpoints to store and retrieve scan data:
+
+- `GET /api/scans` - Retrieve all stored scans
+- `POST /api/scans` - Save a new scan (body: { phoneNumber, amount, name })
+- `POST /api/extract` - Extract data from image (body: { base64Image, mimeType })
