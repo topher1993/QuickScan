@@ -4,7 +4,7 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -22,22 +22,55 @@ app.use(express.json({ limit: '10mb' })); // Increase limit for images
 const dbPath = path.join(__dirname, '..', 'database.db');
 const db = new sqlite3.Database(dbPath);
 
-// Create tables
-db.run(`
-  CREATE TABLE IF NOT EXISTS scans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    phoneNumber TEXT,
-    amount REAL,
-    name TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
 // Gemini AI setup
-if (!process.env.GEMINI_API_KEY) {
-  console.error('GEMINI_API_KEY environment variable is not set!');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+
+// Function to extract data from receipt using Gemini AI
+const extractReceiptData = async (base64Image: string, mimeType: string) => {
+  try {
+    const prompt = `Analyze this receipt image and extract the following information:
+- Merchant/Store Name
+- Phone Number (if visible)
+- Payment Amount (the total amount paid)
+
+Return the information in valid JSON format with these exact keys:
+{
+  "name": "merchant name",
+  "phoneNumber": "phone number or 'Unknown'",
+  "amount": number (just the number, no currency symbols)
 }
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+If any information is not found, use "Unknown" for strings or 0 for amount.`;
+
+    const imagePart = {
+      inlineData: {
+        data: base64Image,
+        mimeType: mimeType,
+      },
+    };
+
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text();
+
+    // Parse the JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        name: parsed.name || 'Unknown',
+        phoneNumber: parsed.phoneNumber || 'Unknown',
+        amount: typeof parsed.amount === 'number' ? parsed.amount : 0
+      };
+    }
+
+    throw new Error('Failed to parse AI response');
+  } catch (error) {
+    console.error('Gemini extraction error:', error);
+    throw error;
+  }
+};
 
 // Routes
 app.get('/api/scans', (_req, res) => {
@@ -68,54 +101,14 @@ app.post('/api/extract', async (req, res) => {
     console.log('Request body:', { mimeType, base64ImageLength: base64Image?.length });
 
     if (!process.env.GEMINI_API_KEY) {
-      console.error('GEMINI_API_KEY not found');
-      return res.status(500).json({ error: 'API key not configured' });
+      return res.status(500).json({ error: 'Gemini API key not configured' });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.0-pro-vision',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Image,
-            },
-          },
-          {
-            text: "Extract 'name', 'phoneNumber', and 'amount' for a payment receipt. Focus on mobile numbers. IMPORTANT: Format phoneNumber as a pure string of digits starting with 09 (e.g., 09171234567). If the image shows +639..., convert it to 09... Remove any spaces or dashes. The amount should be a pure number. If a field is missing, use 'Unknown' or 0.",
-          },
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: {
-              type: Type.STRING,
-              description: "The name of the person or entity",
-            },
-            phoneNumber: {
-              type: Type.STRING,
-              description: "The mobile phone number found (e.g., 09xxxxxxxxx)",
-            },
-            amount: {
-              type: Type.NUMBER,
-              description: "The monetary amount found",
-            },
-          },
-          required: ["name", "phoneNumber", "amount"],
-        },
-      },
-    });
+    // Use Gemini AI to extract data from the image
+    const extractedData = await extractReceiptData(base64Image, mimeType);
+    console.log('Extracted data:', extractedData);
 
-    if (response.text) {
-      const data = JSON.parse(response.text);
-      res.json(data);
-    } else {
-      res.status(500).json({ error: "No text returned from API" });
-    }
+    res.json(extractedData);
   } catch (error) {
     console.error("Gemini Extraction Error:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
