@@ -73,7 +73,7 @@ app.post('/api/extract', async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-pro-vision',
+      model: 'gemini-1.0-pro-vision',
       contents: {
         parts: [
           {
