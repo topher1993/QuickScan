@@ -6,7 +6,7 @@ import { extractDetailsFromImage, fileToGenerativePart } from './services/gemini
 
 const saveScanToDatabase = async (data: ExtractedData) => {
   try {
-    const response = await fetch('http://localhost:3001/api/scans', {
+    const response = await fetch('https://quickscan-backend-i6x8.onrender.com/api/scans', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
