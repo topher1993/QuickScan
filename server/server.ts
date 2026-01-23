@@ -24,7 +24,7 @@ const db = new sqlite3.Database(dbPath);
 
 // Gemini AI setup
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 // Function to extract data from receipt using Gemini AI
 const extractReceiptData = async (base64Image: string, mimeType: string) => {
